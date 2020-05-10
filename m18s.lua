@@ -24,6 +24,11 @@ nextStage1 = 1
 pingPongDir1 = 'forward'
 fixedLengthStageCount1 = 1
 function advance1()
+    if (nextStep1 > #seq1) then
+        nextStep1 = 1
+        nextStage1 = 1
+    end
+
     local nextNote1 = seq1[nextStep1][1]
     local nextNumStages1 = seq1[nextStep1][2]
     local nextGateMode1 = seq1[nextStep1][3]
@@ -84,6 +89,11 @@ nextStage2 = 1
 pingPongDir2 = 'forward'
 fixedLengthStageCount2 = 1
 function advance2()
+    if (nextStep2 > #seq2) then
+        nextStep2 = 1
+        nextStage2 = 1
+    end
+
     local nextNote2 = seq2[nextStep2][1]
     local nextNumStages2 = seq2[nextStep2][2]
     local nextGateMode2 = seq2[nextStep2][3]

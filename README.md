@@ -1,5 +1,5 @@
-## a_weekend
-### a collection of generative sequencing environments for monome crow
+## m18s
+### a sequencer for crow based on the RYK M-185
 
 #### to run:
 - clone or download this repo
