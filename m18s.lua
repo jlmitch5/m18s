@@ -1,4 +1,11 @@
---- m185 ~ 2-voice sequencer inspired by RYK M-185
+-- m185
+-- TWO VOICE SEQUENCER
+-- INSPIRED BY RYK M-185
+--
+-- RESET PROGRAM:
+-- E2/E3 MOVES CURSOR
+-- K2/K3 RESETS NOTE
+-- K2+K3 RANDOMIZES
 
 engine.name = 'PolySub'
 
