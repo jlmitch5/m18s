@@ -1,4 +1,4 @@
--- m185
+-- m18s
 -- TWO VOICE SEQUENCER
 -- INSPIRED BY RYK M-185
 --
@@ -13,7 +13,9 @@ local MusicUtil = require "musicutil"
 local polysub = include 'lib/polysub'
 local screen_framerate = 15
 local sGMs = { "off", "single", "all", "every2", "every3", "every4", "random", "long" }
-local modes = { "forward", "pingPong", "fixedLength", "random" }
+local modes = { "forward", "pingPong", "random", "fixedLength"}
+local crowOutputModes = {"off", "v/oct + v-trig", "hz/v + s-trig"}
+local midiOutOptions = {"off", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 
 local scale_names = {}
 local notes = {}
@@ -70,44 +72,215 @@ v2 = {
   }
 }
 
--- handle note generation
+-- handle note generation and output
 
 local noteCounter = 1
 local heldNotes1 = {}
 local heldNotes2 = {}
+local active_midi_notes_1 = {}
+local active_midi_notes_2 = {}
 
 function getNote(scale, seqNote)
   return scale[(seqNote - 1) % #scale + 1]
 end
 
-function pulseNote(voice, freq)
+function pulseNote(voice, freq, noteNum)
   local gateLength = voice == 1 and params:get('v1_gateLength') or params:get('v2_gateLength')
   local currentNote = noteCounter
   noteCounter = noteCounter + 1
-  engine.start(currentNote, freq)
+  if voice == 1 and params:get("crowOutput121") == 2 then
+    local vOctNote = noteNum - 50
+    crow.output[1].volts = vOctNote/12
+    crow.output[2].execute()
+  elseif voice == 1 and params:get("crowOutput121") == 3 then
+    local ms20Note = noteNum - 36
+    crow.output[1].volts = .5 * math.pow(2, ms20Note/12)
+    crow.output[2].execute()
+  end
+  if voice == 1 and params:get("crowOutput341") == 2 then
+    local vOctNote = noteNum - 50
+    crow.output[3].volts = vOctNote/12
+    crow.output[4].execute()
+  elseif voice == 1 and params:get("crowOutput341") == 3 then
+    local ms20Note = noteNum - 36
+    crow.output[3].volts = .5 * math.pow(2, ms20Note/12)
+    crow.output[4].execute()
+  end
+  if voice == 2 and params:get("crowOutput122") == 2 then
+    local vOctNote = noteNum - 50
+    crow.output[1].volts = vOctNote/12
+    crow.output[2].execute()
+  elseif voice == 2 and params:get("crowOutput122") == 3 then
+    local ms20Note = noteNum - 36
+    crow.output[1].volts = .5 * math.pow(2, ms20Note/12)
+    crow.output[2].execute()
+  end
+  if voice == 2 and params:get("crowOutput342") == 2 then
+    local vOctNote = noteNum - 50
+    crow.output[3].volts = vOctNote/12
+    crow.output[4].execute()
+  elseif voice == 2 and params:get("crowOutput342") == 3 then
+    local ms20Note = noteNum - 36
+    crow.output[3].volts = .5 * math.pow(2, ms20Note/12)
+    crow.output[4].execute()
+  end
+  if (voice == 1 and params:get("midiOutput1") > 1) then
+    midi_out_device:note_on(noteNum, 96, params:get("midiOutput1") - 1)
+  elseif (voice == 2 and params:get("midiOutput2") > 1) then
+    midi_out_device:note_on(noteNum, 96, params:get("midiOutput2") - 1)
+  end
+  if (voice == 1 and params:get("jfOutput1") == 2) or (voice == 2 and params:get("jfOutput2") == 2) then
+    local octOffset = voice == 1 and params:get("jfOctOffset1") or params:get("jfOctOffset2")
+    crow.ii.jf.play_note((noteNum-60)/12 + octOffset,5)
+  end
+  if (voice == 1 and params:get("audioOutput1") == 2) or (voice == 2 and params:get("audioOutput2") == 2) then
+    engine.start(currentNote, freq)
+  end
   clock.sleep(gateLength)
-  engine.stop(currentNote)
+  if (voice == 1 and params:get("midiOutput1") > 1) then
+    midi_out_device:note_off(noteNum,  nil, params:get("midiOutput1") - 1)
+  elseif (voice == 2 and params:get("midiOutput2") > 1) then
+    midi_out_device:note_off(noteNum, nil, params:get("midiOutput2") - 1)
+  end
+  if (voice == 1 and params:get("audioOutput1") == 2) or (voice == 2 and params:get("audioOutput2") == 2) then
+    engine.stop(currentNote)
+  end
 end
 
 function playNote (voice, noteNum, gateType, cur)
   local cur_oct = voice == 1 and params:get('v1_octave') or params:get('v2_octave')
-  local freq = MusicUtil.note_num_to_freq(getNote(notes, noteNum) + cur_oct * 12)
+  local actualNoteNum = getNote(notes, noteNum) + cur_oct * 12
+  local freq = MusicUtil.note_num_to_freq(actualNoteNum)
   if gateType == 'pulse' then
-      clock.run(pulseNote, voice, freq)
+    if voice == 1 and params:get("crowOutput121") == 2 then
+      crow.output[2].action = "{to(5,0),to(0, " .. params:get("v1_gateLength") .. ")}"
+    elseif voice == 1 and params:get("crowOutput121") == 3 then
+      crow.output[2].action = "{to(0,0),to(5, " .. params:get("v1_gateLength") .. ")}"
+    end
+    if voice == 1 and params:get("crowOutput341") == 2 then
+      crow.output[4].action = "{to(5,0),to(0, " .. params:get("v1_gateLength") .. ")}"
+    elseif voice == 1 and params:get("crowOutput341") == 3 then
+      crow.output[4].action = "{to(0,0),to(5, " .. params:get("v1_gateLength") .. ")}"
+    end
+    if voice == 2 and params:get("crowOutput122") == 2 then
+      crow.output[2].action = "{to(5,0),to(0, " .. params:get("v2_gateLength") .. ")}"
+    elseif voice == 2 and params:get("crowOutput122") == 3 then
+      crow.output[2].action = "{to(0,0),to(5, " .. params:get("v2_gateLength") .. ")}"
+    end
+    if voice == 2 and params:get("crowOutput342") == 2 then
+      crow.output[4].action = "{to(5,0),to(0, " .. params:get("v2_gateLength") .. ")}"
+    elseif voice == 2 and params:get("crowOutput342") == 3 then
+      crow.output[4].action = "{to(0,0),to(5, " .. params:get("v2_gateLength") .. ")}"
+    end
+    clock.run(pulseNote, voice, freq, actualNoteNum)
   elseif gateType == 'hold' then
     local currentNote = noteCounter
     noteCounter = noteCounter + 1
     table.insert(voice == 1 and heldNotes1 or heldNotes2, currentNote)
-    engine.start(currentNote, freq)
+    if (voice == 1 and params:get("audioOutput1") == 2) or (voice == 2 and params:get("audioOutput2") == 2) then
+      engine.start(currentNote, freq)
+    end
+    if voice == 1 and params:get("crowOutput121") == 2 then
+      local vOctNote = actualNoteNum - 50
+      crow.output[1].volts = vOctNote/12
+      crow.output[2].volts = 5
+    elseif voice == 1 and params:get("crowOutput121") == 3 then
+      local ms20Note = actualNoteNum - 36
+      crow.output[1].volts = .5 * math.pow(2, ms20Note/12)
+      crow.output[2].volts = 0
+    end
+    if voice == 1 and params:get("crowOutput341") == 2 then
+      local vOctNote = actualNoteNum - 50
+      crow.output[3].volts = vOctNote/12
+      crow.output[4].volts = 5
+    elseif voice == 1 and params:get("crowOutput341") == 3 then
+      local ms20Note = actualNoteNum - 36
+      crow.output[3].volts = .5 * math.pow(2, ms20Note/12)
+      crow.output[4].volts = 0
+    end
+    if voice == 2 and params:get("crowOutput122") == 2 then
+      local vOctNote = actualNoteNum - 50
+      crow.output[1].volts = vOctNote/12
+      crow.output[2].volts = 5
+    elseif voice == 2 and params:get("crowOutput122") == 3 then
+      local ms20Note = actualNoteNum - 36
+      crow.output[1].volts = .5 * math.pow(2, ms20Note/12)
+      crow.output[2].volts = 0
+    end
+    if voice == 2 and params:get("crowOutput342") == 2 then
+      local vOctNote = actualNoteNum - 50
+      crow.output[3].volts = vOctNote/12
+      crow.output[4].volts = 5
+    elseif voice == 2 and params:get("crowOutput342") == 3 then
+      local ms20Note = actualNoteNum - 36
+      crow.output[3].volts = .5 * math.pow(2, ms20Note/12)
+      crow.output[4].volts = 0
+    end
+    if (voice == 1 and params:get("midiOutput1") > 1) then
+      table.insert(active_midi_notes_1, actualNoteNum)
+      midi_out_device:note_on(actualNoteNum, 96, params:get("midiOutput1") - 1)
+    elseif (voice == 2 and params:get("midiOutput2") > 1) then
+      table.insert(active_midi_notes_2, MusicUtil.freq_to_note_num(freq))
+      midi_out_device:note_on(actualNoteNum, 96, params:get("midiOutput2") - 1)
+    end
+    if (voice == 1 and params:get("jfOutput1") == 2) or (voice == 2 and params:get("jfOutput2") == 2) then
+      local octOffset = voice == 1 and params:get("jfOctOffset1") or params:get("jfOctOffset2")
+      crow.ii.jf.play_note((actualNoteNum-60)/12 + octOffset,5)
+    end
+  end
+end
+
+function all_midi_notes_off(voice)
+  if (voice == 1 and params:get("midiOutput1") > 1) then
+    for _, a in pairs(active_midi_notes_1) do
+      midi_out_device:note_off(a, nil, params:get("midiOutput1") - 1)
+    end
+    active_midi_notes_1 = {}
+  elseif (voice == 2 and params:get("midiOutput2") > 1) then
+    for _, a in pairs(active_midi_notes_2) do
+      midi_out_device:note_off(a, nil, params:get("midiOutput2") - 1)
+    end
+    active_midi_notes_2 = {}
   end
 end
 
 function stopHeldNote (voice, all)
+  if voice == 1 and params:get("crowOutput121") == 2 then
+    crow.output[2].volts = 0
+  elseif voice == 1 and params:get("crowOutput121") == 3 then
+    crow.output[2].volts = 5
+  end
+  if voice == 1 and params:get("crowOutput341") == 2 then
+    crow.output[4].volts = 0
+  elseif voice == 1 and params:get("crowOutput341") == 3 then
+    crow.output[4].volts = 5
+  end
+  if voice == 2 and params:get("crowOutput122") == 2 then
+    crow.output[2].volts = 0
+  elseif voice == 2 and params:get("crowOutput122") == 3 then
+    crow.output[2].volts = 5
+  end
+  if voice == 2 and params:get("crowOutput342") == 2 then
+    crow.output[4].volts = 0
+  elseif voice == 2 and params:get("crowOutput342") == 3 then
+    crow.output[4].volts = 5
+  end
+
   local noteToStop = table.remove(voice == 1 and heldNotes1 or heldNotes2)
+  if (voice == 1 and params:get("midiOutput1") > 1) then
+    local m = table.remove(active_midi_notes_1)
+    midi_out_device:note_off(m, nil, params:get("midiOutput1") - 1)
+  elseif (voice == 2 and params:get("midiOutput2") > 1) then
+    local m = table.remove(active_midi_notes_1)
+    midi_out_device:note_off(m, nil, params:get("midiOutput2") - 1)
+  end
   if noteToStop ~= nil then
-    engine.stop(noteToStop)
+    if (voice == 1 and params:get("audioOutput1") == 2) or (voice == 2 and params:get("audioOutput2") == 2) then
+      engine.stop(noteToStop)
+    end
     if all then
       stopHeldNote(voice, true)
+      all_midi_notes_off(voice)
     end
   end
 end
@@ -202,17 +375,23 @@ function build_scale()
   for i = 1, num_to_add do
     table.insert(notes, notes[8 - num_to_add])
   end
-  tab.print(notes)
+  -- tab.print(notes)
 end
 
 function init()
       for i = 1, #MusicUtil.SCALES do
         table.insert(scale_names, string.lower(MusicUtil.SCALES[i].name))
       end
+      
+      midi_out_device = midi.connect(1)
+      midi_out_device.event = function() end
   
+      params:add{type = "number", id = "midi_out_device", name = "midi out device",
+        min = 1, max = 4, default = 1,
+        action = function(value) midi_out_device = midi.connect(value) end}
       params:add_separator('scale params')
       params:add{type = "option", id = "scale_mode", name = "scale",
-      options = scale_names, default = 31,
+      options = scale_names, default = 13,
       action = function() build_scale() end}
       params:add{
         type = "number",
@@ -220,15 +399,53 @@ function init()
         name = "root note",
         min = 0,
         max = 11,
-        default = 0,
+        default = 4,
         formatter = function(param) return MusicUtil.note_num_to_name(param:get()) end,
         action = function() build_scale() end
       }
-      params:add_separator('sequence one params')
+      params:add_separator('sequence one outputs')
+      params:add_taper("v1_gateLength", "pulse length", 0.05, 10, .17, 0, "s")
+      params:add_number ("v1_octave", "global octave", 0, 8, 4)
+      params:add{type = "option", id = "audioOutput1", name = "audio", default = 2,
+        options = {'off', 'on'},
+        action = function(value)
+          if value == 1 then
+            engine.stopAll()
+          end
+        end
+      }
+      params:add{type = "option", id = "crowOutput121", name = "crow (1+2)", default = 1,
+        options = crowOutputModes,
+        action = function(value)
+          if value == 2 then
+            crow.output[2].volts = 0
+          elseif value == 3 then
+            crow.output[2].volts = 5
+          end
+        end}
+      params:add{type = "option", id = "crowOutput341", name = "crow (3+4)", default = 1,
+        options = crowOutputModes,
+        action = function(value)
+          if value == 2 then
+            crow.output[4].volts = 0
+          elseif value == 3 then
+            crow.output[4].volts = 5
+          end
+        end}
+      params:add{type = "option", id = "midiOutput1", name = "midi (ch)", default = 1,
+        options = midiOutOptions}
+      params:add{type = "option", id = "jfOutput1", name = "jf", default = 1,
+        options = {'off', 'on'},
+        action = function(value)
+          if value == 2 then
+            crow.ii.pullup(true)
+            crow.ii.jf.mode(1)
+          end
+        end}
+      params:add_number ("jfOctOffset1", "jf octave offset", -3, 3, 0)
+      params:add_separator('sequence one mode')
       params:add_option("v1_mode", "mode", modes, 1)
-      params:add_taper("v1_gateLength", "pulse length", 0.05, 10, .3, 0, "s")
       params:add_number ("v1_fixedLength", "fixed length", 1, 128, 16)
-      params:add_number ("v1_octave", "octave", 0, 8, 5)
       
       -- params:add_taper("reverb_mix", "*"..sep.."mix", 0, 100, 50, 0, "%")
       
@@ -239,11 +456,49 @@ function init()
       --   oct = 5 (0..8)
       --   scale = { 0, 3, 5, 7, 10 } (?)
       -- }
-      params:add_separator('sequence two params')
+      params:add_separator('sequence two outputs')
+      params:add_taper("v2_gateLength", "pulse length", 0.05, 10, .067, 0, "s")
+      params:add_number ("v2_octave", "octave", 0, 8, 3)
+      params:add{type = "option", id = "audioOutput2", name = "audio", default = 2,
+        options = {'off', 'on'},
+        action = function(value)
+          if value == 1 then
+            engine.stopAll()
+          end
+        end
+      }
+      params:add{type = "option", id = "crowOutput122", name = "crow (1+2)", default = 1,
+        options = crowOutputModes,
+        action = function(value)
+          if value == 2 then
+            crow.output[2].volts = 0
+          elseif value == 3 then
+            crow.output[2].volts = 5
+          end
+        end}
+      params:add{type = "option", id = "crowOutput342", name = "crow (3+4)", default = 1,
+        options = crowOutputModes,
+        action = function(value)
+          if value == 2 then
+            crow.output[4].volts = 0
+          elseif value == 3 then
+            crow.output[4].volts = 5
+          end
+        end}
+      params:add{type = "option", id = "midiOutput2", name = "midi (ch)", default = 1,
+        options = midiOutOptions}
+      params:add{type = "option", id = "jfOutput2", name = "jf", default = 1,
+        options = {'off', 'on'},
+        action = function(value)
+          if value == 2 then
+            crow.ii.pullup(true)
+            crow.ii.jf.mode(1)
+          end
+        end}
+      params:add_number ("jfOctOffset2", "jf octave offset", -3, 3, 0)
+      params:add_separator('sequence two mode')
       params:add_option("v2_mode", "mode", modes, 1)
-      params:add_taper("v2_gateLength", "pulse length", 0.05, 10, .2, 0, "s")
       params:add_number ("v2_fixedLength", "fixed length", 1, 128, 16)
-      params:add_number ("v2_octave", "octave", 0, 8, 4)
       
       -- v2 = {
       --   mode = "forward",
@@ -252,12 +507,14 @@ function init()
       --   oct = 4,
       --   scale = { 0, 3, 5, 7, 10 },
       -- }
-      params:add_separator('sound params')
+      params:add_separator('audio params')
       polysub:params()
       
       -- params:default()
-      params:read("data/m18s-01.pset")
+      params:read(1)
       params:bang()
+      randomizeAllSteps(1)
+      randomizeAllSteps(2)
 
       function pulse()
           while true do
@@ -329,17 +586,19 @@ end
 local keyPressed2 = false
 local keyPressed3 = false
 function key(n,z)
-  function randomize()
-    stopHeldNote(1, true)
-    stopHeldNote(2, true)
-    randomizeAllSteps(1)
-    randomizeAllSteps(2)
+  function randomize(voice)
+    stopHeldNote(voice, true)
+    randomizeAllSteps(voice)
   end
   if n == 2 or n == 3 then
-    if z == 1 and (keyPressed2 or keyPressed3) then
-      randomize()
-      reset(1)
-      reset(2)
+    if z == 1 then
+      if keyPressed3 then
+        randomize(1)
+        reset(1)
+      else
+        randomize(2)
+        reset(2)
+      end
     end
     if z == 1 then
       if n == 2 then
@@ -440,17 +699,18 @@ function drawTabs()
   -- end
 
   screen.level(8)
-  screen.rect(0,0,28,11)
+  screen.rect(0,0,33,11)
   screen.fill()
   screen.stroke()
   screen.font_face(fontFace)
-  screen.font_size(9)
+  screen.font_size(10)
   screen.level(0)
   screen.move(1, 9)
   screen.text('RESET')
   screen.stroke()
   screen.level(8)
-  screen.move(126, 9)
+  screen.move(127, 8)
+  screen.font_size(8)
   if docstring == 0 then
     screen.text_right('TURN E1 FOR DOCS')
   elseif docstring == 1 then
@@ -461,7 +721,9 @@ function drawTabs()
     -- screen.text_right('K2/K3 RESETS/MUTES')
     screen.text_right('K2/K3 RESETS NOTE')
   elseif docstring == 3 then
-    screen.text_right('K2+K3 RANDOMIZES')
+    screen.text_right('K3+K2 RANDOMIZES 1')
+  elseif docstring == 4 then
+    screen.text_right('K2+K3 RANDOMIZES 2')
   end
   
   
@@ -477,50 +739,66 @@ end
 
 function drawSpacerLines()
   screen.move(0,11)
-  screen.level(15)
+  screen.level(10)
   screen.line(128,11)
   screen.stroke()
 
   screen.move(0,33)
-  screen.level(15)
+  screen.level(10)
   screen.line(128,33)
   screen.stroke()
   
   screen.move(0,55)
-  screen.level(15)
+  screen.level(10)
   screen.line(128,55)
   screen.stroke()
 end
 
+function drawStepIndicators(_v, invert)
+  local cur = _v == 1 and v1 or v2
+  local voiceYOffset = (_v - 1) * 22 + yOff + 0 + 2
+  local stepRef = {}
+  local numSteps = 0
+  for i = 1, #cur.seq do
+    local firstStep = numSteps
+    local lastStep = numSteps + cur.seq[i][2] - 1
+    if firstStep <= 31 and lastStep >= 32 then
+      table.insert(stepRef, { firstStep , 31, i })
+      table.insert(stepRef, { 32 , lastStep, i })
+    else
+      table.insert(stepRef, { firstStep, lastStep, i })
+    end
+    numSteps = numSteps + cur.seq[i][2]
+  end
+  for i = 1, #stepRef do
+    -- TODO: support highlight
+    local onLevel = cur.nextStep == stepRef[i][3] and 15 or 3
+    local row = math.floor(stepRef[i][1]/32)
+    screen.move(4*stepRef[i][1] + 1 - row * 128, 5 + voiceYOffset + row * 8)
+    screen.level(onLevel)
+    screen.line_width(2)
+    screen.line(4*stepRef[i][2] + 3 - row * 128, 5 + voiceYOffset + row * 8)
+    screen.stroke()
+  end
+  screen.line_width(1)
+end
+
 function drawPulseNotes(_v, invert)
   local cur = _v == 1 and v1 or v2
-  local voiceYOffset = (_v - 1) * 22 + yOff
+  local voiceYOffset = (_v - 1) * 22 + yOff - 3 + 1 + 2
   local seqRef = {}
-  local stepRef = {}
   for i = 1, #cur.seq do
     for j = 1, cur.seq[i][2] do
       if invert then
         table.insert(seqRef,
-          cur.nextStep == i and cur.nextStage == j and 0 or
           shouldGateFire(j, cur.seq[i][2], cur.seq[i][3], true) and 7 or
           shouldRandomPulseDisplay(j, cur.seq[i][2], cur.seq[i][3], _v) and 7 or
           12
         )
-        table.insert(stepRef,
-          j == 1 and cur.nextStep == i and 0 or
-          j == 1 and 7 or
-          12
-        )
       else
         table.insert(seqRef,
-          cur.nextStep == i and cur.nextStage == j and 15 or
           shouldGateFire(j, cur.seq[i][2], cur.seq[i][3], true) and 3 or
           shouldRandomPulseDisplay(j, cur.seq[i][2], cur.seq[i][3], _v) and 3 or
-          0
-        )
-        table.insert(stepRef,
-          j == 1 and cur.nextStep == i and 15 or
-          j == 1 and 5 or
           0
         )
       end
@@ -530,17 +808,14 @@ function drawPulseNotes(_v, invert)
     i = i - 1
     local row = math.floor(i/32)
     screen.level(seqRef[i + 1])
-    screen.circle(4*i + 2 - row * 128,10 + row * 10 + voiceYOffset, 1)
-    screen.stroke()
-    screen.level(stepRef[i + 1])
-    screen.circle(4*i + 2 - row * 128,5 + row * 10 + voiceYOffset, 1)
+    screen.circle(4*i + 2 - row * 128,10 + row * 8 + voiceYOffset, 1)
     screen.stroke()
   end
 end
 
 function drawLongNotes(_v, invert)
   local cur = _v == 1 and v1 or v2
-  local voiceYOffset = (_v - 1) * 22 + yOff
+  local voiceYOffset = (_v - 1) * 22 + yOff - 3 + 1 + 2
   local longRef = {}
   local numSteps = 0
   for i = 1, #cur.seq do
@@ -548,74 +823,62 @@ function drawLongNotes(_v, invert)
       local firstStep = numSteps
       local lastStep = numSteps + cur.seq[i][2] - 1
       if firstStep <= 31 and lastStep >= 32 then
-        table.insert(longRef, { firstStep , 31 })
-        table.insert(longRef, { 32 , lastStep })
+        table.insert(longRef, { firstStep , 31, i })
+        table.insert(longRef, { 32 , lastStep, i })
       else
-        table.insert(longRef, { firstStep, lastStep })
+        table.insert(longRef, { firstStep, lastStep, i })
       end
     end
     numSteps = numSteps + cur.seq[i][2]
   end
-  -- print('hey')
-  -- tab.print(longRef)
   for i = 1, #longRef do
     local onLevel = invert and 7 or 3
     local row = math.floor(longRef[i][1]/32)
-    screen.move(4*longRef[i][1] + 1 - row * 128, 10 + voiceYOffset + row * 10)
+    screen.move(4*longRef[i][1] + 1 - row * 128, 10 + voiceYOffset + row * 8)
     screen.level(onLevel)
     screen.line_width(2)
-    screen.line(4*longRef[i][2] + 3 - row * 128, 10 + voiceYOffset + row * 10)
+    screen.line(4*longRef[i][2] + 3 - row * 128, 10 + voiceYOffset + row * 8)
     screen.stroke()
+    if i == longRef[i][3] then
+    end
   end
   screen.line_width(1)
 end
 
-function drawCurrentStage(_v, invert)
+function drawCurrentNote(_v, invert)
+  local onLevel = invert and 0 or 15
   local cur = _v == 1 and v1 or v2
-  local voiceYOffset = (_v - 1) * 22 + yOff
-  local seqRef = {}
-  local stepRef = {}
-  for i = 1, #cur.seq do
-    for j = 1, cur.seq[i][2] do
-      if invert then
-        table.insert(seqRef,
-          cur.nextStep == i and cur.nextStage == j and 0 or -1
-        )
-        table.insert(stepRef,
-          j == 1 and cur.nextStep == i and 0 or -1
-        )
-      else
-        table.insert(seqRef,
-          cur.nextStep == i and cur.nextStage == j and 15 or -1
-        )
-        table.insert(stepRef,
-          j == 1 and cur.nextStep == i and 15 or -1
-        )
-      end
-    end
-  end 
-  for i = 1, #seqRef do
-    i = i - 1
-    local row = math.floor(i/32)
-    if seqRef[i + 1] ~= -1 then
-      screen.level(seqRef[i + 1])
-      screen.circle(4*i + 2 - row * 128,10 + row * 10 + voiceYOffset, 1)
-      screen.stroke()
-      screen.level(stepRef[i + 1])
-      screen.circle(4*i + 2 - row * 128,5 + row * 10 + voiceYOffset, 1)
-      screen.stroke()
-    end
+  local voiceYOffset = (_v - 1) * 22 + yOff - 3 + 1 + 2
+  local noteVal = cur.nextStage
+  for i = 1, cur.nextStep - 1 do
+    noteVal = noteVal + cur.seq[i][2]
   end
+  -- print(noteVal)
+  local row = math.floor(noteVal/34)
+  screen.level(onLevel)
+  screen.circle(4 * noteVal - 2 - row * 128,10 + row * 8 + voiceYOffset, 1)
+  screen.stroke()
+end
+
+function drawResetCursors()
+  screen.level(12)
+  local row1 = math.floor((cursor.v1 - 1) / 32)
+  screen.rect(1 + 4 * (cursor.v1 - 1) % 128, 16 + 2 + row1 * 8, 3, 3)
+  screen.stroke()
+  local row2 = math.floor((cursor.v2 - 1) / 32)
+  screen.rect(1 + 4 * (cursor.v2 - 1) % 128, 38 + 2 + row2 * 8, 3, 3)
+  screen.stroke()
 end
 
 function drawFooter()
   screen.font_face(fontFace)
-  screen.font_size(9)
+  screen.font_size(10)
   screen.level(8)
   screen.move(-2,64)
-  screen.text('1 ' .. v1.nextStep .. ':' .. v1.nextStage .. ':' .. string.format("%03d", v1.nextNote))
-  screen.move(127,64)
-  screen.text_right('2 ' .. v2.nextStep .. ':' .. v2.nextStage .. ':' .. string.format("%03d", v2.nextNote))
+  screen.text('1 ' .. v1.nextStep .. ':' .. v1.nextStage .. ':' .. string.gsub(MusicUtil.note_num_to_name(getNote(notes, v1.nextNote) + params:get('v1_octave') * 12, true), '♯', '#'))
+  screen.move(74,64)
+  screen.text('2 ' .. v2.nextStep .. ':' .. v2.nextStage .. ':' .. string.gsub(MusicUtil.note_num_to_name(getNote(notes, v2.nextNote) + params:get('v2_octave') * 12, true), '♯', '#'))
+  screen.font_face(fontFace)
   screen.stroke() 
     if highlighted == 1 then
     screen.move(-2,64)
@@ -629,28 +892,20 @@ function drawFooter()
   end
 end
 
-function drawResetCursors()
-  screen.level(12)
-  local row1 = math.floor((cursor.v1 - 1) / 32)
-  screen.rect(1 + 4 * (cursor.v1 - 1) % 128, 18 + row1 * 10, 3, 3)
-  screen.stroke()
-  local row2 = math.floor((cursor.v2 - 1) / 32)
-  screen.rect(1 + 4 * (cursor.v2 - 1) % 128, 40 + row2 * 10, 3, 3)
-  screen.stroke()
-end
-
 function redraw()
   screen.aa(0)
   screen.clear()
   drawTabs()
   drawHighlights()
   drawSpacerLines()
+  drawStepIndicators(1, highlighted == 1 and true or false)
   drawPulseNotes(1, highlighted == 1 and true or false)
   drawLongNotes(1, highlighted == 1 and true or false)
-  drawCurrentStage(1, highlighted == 1 and true or false)
+  drawCurrentNote(1, highlighted == 1 and true or false)
+  drawStepIndicators(2, highlighted == 2 and true or false)
   drawPulseNotes(2, highlighted == 2 and true or false)
   drawLongNotes(2, highlighted == 2 and true or false)
-  drawCurrentStage(2, highlighted == 1 and true or false)
+  drawCurrentNote(2, highlighted == 2 and true or false)
   drawFooter()
   drawResetCursors()
   screen.update()
